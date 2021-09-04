@@ -185,6 +185,8 @@ interface IERC721Metadata is IERC721 {
     function tokenURI(uint256 tokenId) external view returns (string memory);
     
     function currentTokenAmount() external view returns (uint);
+    
+    function contractOwner() external view returns (address);
 }
 
 library Address {
@@ -562,6 +564,10 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
         _name = name_;
         _symbol = symbol_;
         _baseTokenURI = baseTokenURI_;
+    }
+
+    function contractOwner() public view virtual override returns (address) {
+        return owner();
     }
 
     /**
@@ -989,6 +995,8 @@ interface IEventsManagment {
     function getNftCollectionAddress (address _eventContractAddress) external view returns (address);
 
     function getEventStatus (address _eventContractAddress) external view returns (bool);
+    
+    function contractOwner() external view returns (address);
 }
 
 interface IConsumerEvent {
@@ -1101,32 +1109,38 @@ contract ConsumerEvent is Ownable, IConsumerEvent {
       ManagmentAddress = _ManagmentAddress;
       nftCollection = _nftCollection;
       eventsManagment = EventsManagment(_ManagmentAddress);
-      receiver = payable(owner());
+    //   receiver = payable(owner());
     }
     
     // Administrative functions
 
-    function updateReceiverAddress (address payable _receiver) onlyOwner public {
+    function updateReceiverAddress (address payable _receiver) public {
+      require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
       receiver = _receiver;
     }
 
-    function updateEventsManagmentAddress (address _ManagmentAddress) onlyOwner public {
+    function updateEventsManagmentAddress (address _ManagmentAddress) public {
+      require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
       ManagmentAddress = _ManagmentAddress;
     }
 
-    function updateNftCollectionAddress (address _nftCollection) onlyOwner public {
+    function updateNftCollectionAddress (address _nftCollection) public {
+      require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
       nftCollection = _nftCollection;
     }
     
-    function getContractBalance() onlyOwner public view returns(uint) {
+    function getContractBalance() public view returns(uint) {
+        require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
         return address(this).balance;
     }
 
-    function withdrawEther(uint value) onlyOwner public {
-      receiver.transfer(value);
-    }
+    // function withdrawEther(uint value) public {
+    //   require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
+    //   receiver.transfer(value);
+    // }
 
-    function withdrawEtherTo(address payable _to, uint value) onlyOwner public {
+    function withdrawEtherTo(address payable _to, uint value) public {
+        require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
         _to.transfer(value);
     }
 
@@ -1169,6 +1183,11 @@ contract ConsumerEvent is Ownable, IConsumerEvent {
       userAddresses[_userName] = msg.sender;
       
       return IERC721Metadata(nftCollection).currentTokenAmount();
+    }
+
+    function mintTicket(address to, uint256 tokenId, string memory tokenURI_) public {
+      require(IEventsManagment(ManagmentAddress).contractOwner() == msg.sender, "Caller is not owner");
+      IERC721(nftCollection).mint(to, tokenId, tokenURI_); 
     }
     
     function getOwnedTicketsIds (address _walletAddress) public view returns(uint256[] memory) {
@@ -1262,11 +1281,11 @@ contract EventsManagment is Ownable, IEventsManagment {
             // Generate contract addresses via "new" statement
 
             ERC721 _nftCollectionAddress = new ERC721(name,symbol,baseTokenURI);
-            _nftCollectionAddress.transferOwnership(owner());
             ConsumerEvent eventContractAddress = new ConsumerEvent (address(this), address(_nftCollectionAddress));
             PriceConsumerV3 priceConsumerV3AddressInstance = new PriceConsumerV3();
             priceConsumerV3Address = address(priceConsumerV3AddressInstance);
             eventAdress = address(eventContractAddress);
+            _nftCollectionAddress.transferOwnership(eventAdress);
 
             Events[address(eventContractAddress)].eventName = _eventName;
             Events[address(eventContractAddress)].eventDescription = _eventDescription;
@@ -1282,7 +1301,7 @@ contract EventsManagment is Ownable, IEventsManagment {
     }
 
     // function to add new ticket to certain event.
-    // @ticketArray: [[0,"StandardTicket", 1000, 50, "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6"], [1,"Afterparty", 1500, 30, "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3"], [2, "VipTicket", 3000, 20, "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm"]]
+    // @ticketArray: [[0,"Standard", 1000, 50, "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6"], [1,"Afterparty", 1500, 30, "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3"], [2, "Vip", 3000, 20, "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm"]]
     /* Tickets for press:
     BitokBlog: https://gateway.pinata.cloud/ipfs/QmPQTvnohLyr1y7nYsPWNhxnUTCksa67XshFYgPcZDPGm2
     BitsMedia: https://gateway.pinata.cloud/ipfs/QmbmrxK6YH5ZdQoWV5p4TpLnLSfrgg1NxnQnnWtYbEERgq
@@ -1295,6 +1314,7 @@ contract EventsManagment is Ownable, IEventsManagment {
     NaChasi: https://gateway.pinata.cloud/ipfs/QmPRXoNeYzmhGEreCMdcEuhKkQEYovdyWLHAfY11QxDcuP
     Prostocoin: https://gateway.pinata.cloud/ipfs/QmcLSaMgwpZR6s4y7a1Q77fz6qPcDxBhYHnZgxoCP8Rk1V
     */
+    
     function addTickets(address _eventContractAddress, ticketDetails[] calldata ticketArray) onlyOwner public {
       for (uint8 i = 0; i < ticketArray.length; i++) {
           Tickets[_eventContractAddress].push(ticketDetails(i, ticketArray[i].ticketName, ticketArray[i].ticketPrice, ticketArray[i].ticketAmount, ticketArray[i].ticketURI));
@@ -1332,6 +1352,10 @@ contract EventsManagment is Ownable, IEventsManagment {
 
   // Metadata functions
 
+    function contractOwner() public view override returns (address) {
+        return owner();
+    }
+    
     function getNftCollectionAddress (address _eventContractAddress) public override view returns (address) {
       return Events[_eventContractAddress].nftCollectionAddress;
     }
