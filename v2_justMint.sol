@@ -30,8 +30,6 @@ interface IERC721 is IERC165 {
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
 
-    function mint(address to, uint256 tokenId, string memory _tokenURI) external;
-
     /**
      * @dev Returns the number of tokens in ``owner``'s account.
      */
@@ -536,11 +534,13 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     // Token symbol
     string private _symbol;
 
-    // Token URI
-    string private _baseTokenURI;
-    
+
     // Current token ID
     uint private _currentTokenAmount;
+    
+    uint private _currentTokenAmountAfterparty;
+    
+    uint private _currentTokenAmountVip;
 
     // Mapping from token ID to owner address
     mapping(uint256 => address) private _owners;
@@ -548,8 +548,8 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     // Mapping owner address to token count
     mapping(address => uint256) private _balances;
     
-    // Optional mapping for token URIs
-    mapping (uint256 => string) private _tokenURIs;
+    // Optional mapping for token types
+    mapping (uint256 => uint256) private _tokenURIs;
 
     // Mapping from token ID to approved address
     mapping(uint256 => address) private _tokenApprovals;
@@ -557,14 +557,34 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    /**
-     * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
-     */
-    constructor(string memory name_, string memory symbol_, string memory baseTokenURI_) {
+
+    uint256 public MAX_NUMBER;
+    uint256 public MAX_AFTERPARTY;
+    uint256 public MAX_VIP;
+    
+    string public BASE_TOKEN_URI;
+    string public BASE_TOKEN_URI_AFTERPARTY;
+    string public BASE_TOKEN_URI_VIP;
+    
+    constructor(
+        string memory name_, string memory symbol_, 
+        string memory baseTokenURI_, uint256 maxStandard_,
+        string memory baseTokenURIAfterparty_, uint256 maxAfterparty_,
+        string memory baseTokenURIVip_, uint256 maxVip_
+    ) {
         _name = name_;
         _symbol = symbol_;
-        _baseTokenURI = baseTokenURI_;
+        
+        MAX_NUMBER = maxStandard_;
+        MAX_AFTERPARTY = maxAfterparty_;
+        MAX_VIP = maxVip_;
+        
+        BASE_TOKEN_URI = baseTokenURI_;
+        BASE_TOKEN_URI_AFTERPARTY = baseTokenURIAfterparty_;
+        BASE_TOKEN_URI_VIP = baseTokenURIVip_;
     }
+    
+    
 
     function contractOwner() public view virtual override returns (address) {
         return owner();
@@ -621,13 +641,9 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
      * by default, can be overriden in child contracts.
      */
     function _baseURI() internal view virtual returns (string memory) {
-        return _baseTokenURI;
+        return BASE_TOKEN_URI;
     }
     
-    function _setTokenURI(uint256 tokenId, string memory _tokenURI) internal virtual {
-        require(_exists(tokenId), "ERC721Metadata: URI set of nonexistent token");
-        _tokenURIs[tokenId] = _tokenURI;
-    }
 
     /**
      * @dev See {IERC721Metadata-tokenURI}.
@@ -635,21 +651,16 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
         require(_exists(tokenId), "ERC721Metadata: URI query for nonexistent token");
         
-        string memory _tokenURI = _tokenURIs[tokenId];
-        string memory baseURI = _baseURI();
-
-        // If there is no base URI, return the token URI.
-        if (bytes(baseURI).length == 0) {
-            return _tokenURI;
+        uint256 _ticketType = _tokenURIs[tokenId];
+        if (_ticketType == 1) {
+            return BASE_TOKEN_URI_AFTERPARTY;
+        } else if (_ticketType == 2) {
+            return BASE_TOKEN_URI_VIP;
+        } else {
+            return BASE_TOKEN_URI;
         }
-        // If both are set, concatenate the baseURI and tokenURI (via abi.encodePacked).
-        if (bytes(_tokenURI).length > 0) {
-            return string(abi.encodePacked(baseURI, _tokenURI));
-        }
-        // If there is a baseURI but no tokenURI, concatenate the tokenID to the baseURI.
-        return string(abi.encodePacked(baseURI, tokenId.toString()));
-        
     }
+    
     /**
      * @dev See {IERC721-approve}.
      */
@@ -783,69 +794,6 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     }
 
     /**
-     * @dev Safely mints `tokenId` and transfers it to `to`.
-     *
-     * Requirements:
-     *
-     * - `tokenId` must not exist.
-     * - If `to` refers to a smart contract, it must implement {IERC721Receiver-onERC721Received}, which is called upon a safe transfer.
-     *
-     * Emits a {Transfer} event.
-     */
-    function _safeMint(address to, uint256 tokenId, string memory tokenURI_) internal virtual {
-        _safeMint(to, tokenId, tokenURI_, "");
-    }
-
-    /**
-     * @dev Same as {xref-ERC721-_safeMint-address-uint256-}[`_safeMint`], with an additional `data` parameter which is
-     * forwarded in {IERC721Receiver-onERC721Received} to contract recipients.
-     */
-    function _safeMint(
-        address to,
-        uint256 tokenId,
-        string memory tokenURI_,
-        bytes memory _data
-    ) internal virtual {
-        _mint(to, tokenId, tokenURI_);
-        require(
-            _checkOnERC721Received(address(0), to, tokenId, _data),
-            "ERC721: transfer to non ERC721Receiver implementer"
-        );
-    }
-
-    /**
-     * @dev Mints `tokenId` and transfers it to `to`.
-     *
-     * WARNING: Usage of this method is discouraged, use {_safeMint} whenever possible
-     *
-     * Requirements:
-     *
-     * - `tokenId` must not exist.
-     * - `to` cannot be the zero address.
-     *
-     * Emits a {Transfer} event.
-     */
-    function _mint(address to, uint256 tokenId, string memory tokenURI_) internal virtual {
-        require(to != address(0), "ERC721: mint to the zero address");
-        require(!_exists(tokenId), "ERC721: token already minted");
-            
-        _beforeTokenTransfer(address(0), to, tokenId);
-
-        _balances[to] += 1;
-        _owners[tokenId] = to;
-        
-        _setTokenURI(tokenId, tokenURI_);
-        
-        _currentTokenAmount +=1;
-        
-        emit Transfer(address(0), to, tokenId);
-    }
-
-    function mint(address to, uint256 tokenId, string memory tokenURI_) onlyOwner public override virtual {
-      _mint(to, tokenId, tokenURI_);
-    }
-
-    /**
      * @dev Destroys `tokenId`.
      * The approval is cleared when the token is burned.
      *
@@ -962,42 +910,56 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
         address to,
         uint256 tokenId
     ) internal virtual {}
-}
-
-
-
-contract MOF is ERC721 {
-
-    uint256 public MAX_NUMBER;
     
-    constructor(string memory name_, string memory symbol_, string memory baseTokenURI_, uint256 max_) ERC721(name_, symbol_, baseTokenURI_){
-        MAX_NUMBER = max_;
-    }
     
-    function mint(address to, uint256 tokenId, string memory tokenURI_) onlyOwner public override{
-        if (currentTokenAmount() + 1 >= MAX_NUMBER) {
-            revert("MAX_NUMBER");
+    function mint(address to, uint256 tokenId, uint256 ticketType) onlyOwner public {
+        require(to != address(0), "ERC721: mint to the zero address");
+        require(!_exists(tokenId), "ERC721: token already minted");
+        
+        _beforeTokenTransfer(address(0), to, tokenId);
+                
+        if (ticketType == 1) {
+            if (_currentTokenAmountAfterparty >= MAX_AFTERPARTY) {
+                revert("MAX_AFTERPARTY finished");
+            }
+        } else if (ticketType == 2) {
+             if (_currentTokenAmountVip >= MAX_VIP) {
+                revert("MAX_VIP finished");
+            }
+        } else {
+            if (_currentTokenAmount >= MAX_NUMBER) {
+                revert("MAX_NUMBER finished");
+            }
         }
-        _mint(to, tokenId, tokenURI_);
-    }
-}
 
-contract MOFStandart is MOF {
-    constructor() MOF("MOF Standart", "MOFStandart", "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6", 50){
+        _balances[to] += 1;
+        _owners[tokenId] = to;
         
+        if (ticketType == 1) {
+            _tokenURIs[tokenId] = 1;
+            _currentTokenAmountAfterparty++;
+        } else if (ticketType == 2) {
+             _tokenURIs[tokenId] = 2;
+            _currentTokenAmountVip++;
+        } else {
+            _tokenURIs[tokenId] = 0;
+            _currentTokenAmount++;
+        }
+         
+        emit Transfer(address(0), to, tokenId);
     }
+    
 }
 
-contract MOFAfterParty is MOF {
 
-    constructor() MOF("MOF Afterparty", "MOFAfterParty", "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3", 30){
-        
-    }
-}
 
-contract MOFVip is MOF {
-
-    constructor() MOF("MOF Vip", "MOFVip", "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm", 20){
+contract MOFAll is ERC721 {
+    constructor() ERC721(
+        "MOF Tickets", "MOF", 
+        "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6", 50,
+        "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3", 30,
+        "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm", 20
+    ){
         
     }
 }
