@@ -970,7 +970,7 @@ contract MOFAll is ERC721 {
 
 contract MOFDiscover {
     
-    function check(address _nfts, uint8 _max) public view returns (address[] memory) {
+    function checkAddress(address _nfts, uint8 _max) public view returns (address[] memory) {
         ERC721 _nftCollectionAddress = ERC721(_nfts);
         address[] memory cti = new address[](_max);
         for(uint8 i = 1; i < _max; i++) {
@@ -981,6 +981,19 @@ contract MOFDiscover {
             }
 
           
+        }
+        return cti;
+    }
+    
+    function checkUri(address _nfts, uint8 _max) public view returns (string[] memory) {
+        ERC721 _nftCollectionAddress = ERC721(_nfts);
+        string[] memory cti = new string[](_max);
+        for(uint8 i = 1; i < _max; i++) {
+            try _nftCollectionAddress.tokenURI(i) returns (string memory v) {
+               cti[i] = v;
+            } catch (bytes memory /*lowLevelData*/) {
+               // do nothing
+            }
         }
         return cti;
     }
