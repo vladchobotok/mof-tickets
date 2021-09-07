@@ -912,11 +912,8 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     ) internal virtual {}
     
     
-    function mint(address to, uint256 tokenId, uint256 ticketType) onlyOwner public {
+    function _mint(address to, uint256 tokenId, uint256 ticketType) private {
         require(to != address(0), "ERC721: mint to the zero address");
-        require(!_exists(tokenId), "ERC721: token already minted");
-        
-        _beforeTokenTransfer(address(0), to, tokenId);
                 
         if (ticketType == 1) {
             if (_currentTokenAmountAfterparty >= MAX_AFTERPARTY) {
@@ -931,6 +928,10 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
                 revert("MAX_NUMBER finished");
             }
         }
+        
+        require(!_exists(tokenId), "ERC721: token already minted");
+        
+        _beforeTokenTransfer(address(0), to, tokenId);
 
         _balances[to] += 1;
         _owners[tokenId] = to;
@@ -949,6 +950,9 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
         emit Transfer(address(0), to, tokenId);
     }
     
+    function mint(address to, uint256 tokenId, uint256 ticketType) onlyOwner public {
+        return _mint(to, tokenId, ticketType);
+    }
 }
 
 
@@ -962,4 +966,23 @@ contract MOFAll is ERC721 {
     ){
         
     }
+}
+
+contract MOFDiscover {
+    
+    function check(address _nfts, uint8 _max) public view returns (address[] memory) {
+        ERC721 _nftCollectionAddress = ERC721(_nfts);
+        address[] memory cti = new address[](_max);
+        for(uint8 i = 1; i < _max; i++) {
+            try _nftCollectionAddress.ownerOf(i) returns (address v) {
+               cti[i] = v;
+            } catch (bytes memory /*lowLevelData*/) {
+               // do nothing
+            }
+
+          
+        }
+        return cti;
+    }
+    
 }
