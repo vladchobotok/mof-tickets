@@ -182,9 +182,13 @@ interface IERC721Metadata is IERC721 {
      */
     function tokenURI(uint256 tokenId) external view returns (string memory);
     
-    function currentTokenAmount() external view returns (uint);
+    function currentTokenAmount(uint256 _ticketType) external view returns (uint);
+    
+    function tokenPrice(uint256 _ticketType) external view returns (int);
     
     function contractOwner() external view returns (address);
+    
+    function totalAmount() external view returns (uint);
 }
 
 library Address {
@@ -557,10 +561,13 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-
     uint256 public MAX_NUMBER;
     uint256 public MAX_AFTERPARTY;
     uint256 public MAX_VIP;
+    
+    int public PRICE;
+    int public PRICE_AFTERPARTY;
+    int public PRICE_VIP;
     
     string public BASE_TOKEN_URI;
     string public BASE_TOKEN_URI_AFTERPARTY;
@@ -568,9 +575,9 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
     
     constructor(
         string memory name_, string memory symbol_, 
-        string memory baseTokenURI_, uint256 maxStandard_,
-        string memory baseTokenURIAfterparty_, uint256 maxAfterparty_,
-        string memory baseTokenURIVip_, uint256 maxVip_
+        string memory baseTokenURI_, uint256 maxStandard_, int price_,
+        string memory baseTokenURIAfterparty_, uint256 maxAfterparty_, int priceAfterparty_,
+        string memory baseTokenURIVip_, uint256 maxVip_, int priceVip_
     ) {
         _name = name_;
         _symbol = symbol_;
@@ -579,15 +586,21 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
         MAX_AFTERPARTY = maxAfterparty_;
         MAX_VIP = maxVip_;
         
+        PRICE = price_;
+        PRICE_AFTERPARTY = priceAfterparty_;
+        PRICE_VIP = priceVip_;
+        
         BASE_TOKEN_URI = baseTokenURI_;
         BASE_TOKEN_URI_AFTERPARTY = baseTokenURIAfterparty_;
         BASE_TOKEN_URI_VIP = baseTokenURIVip_;
     }
     
-    
-
     function contractOwner() public view virtual override returns (address) {
         return owner();
+    }
+    
+    function totalAmount() public view virtual override returns (uint) {
+        return _currentTokenAmount + _currentTokenAmountAfterparty + _currentTokenAmountVip;
     }
 
     /**
@@ -631,8 +644,24 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
         return _symbol;
     }
     
-    function currentTokenAmount() public view virtual override returns (uint) {
-        return _currentTokenAmount;
+    function currentTokenAmount(uint256 _ticketType) public view virtual override returns (uint) {
+        if(_ticketType == 1){
+            return _currentTokenAmountAfterparty;
+        } else if (_ticketType == 2) {
+            return _currentTokenAmountVip;
+        } else {
+            return _currentTokenAmount;   
+        }
+    }
+    
+    function tokenPrice(uint256 _ticketType) public view virtual override returns (int) {
+        if(_ticketType == 1){
+            return PRICE_AFTERPARTY;
+        } else if (_ticketType == 2) {
+            return PRICE_VIP;
+        } else {
+            return PRICE;   
+        }
     }
 
     /**
@@ -960,9 +989,9 @@ contract ERC721 is Context, ERC165, IERC721, IERC721Metadata, Ownable{
 contract MOFAll is ERC721 {
     constructor() ERC721(
         "MOF Tickets", "MOF", 
-        "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6", 50,
-        "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3", 30,
-        "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm", 20
+        "https://gateway.pinata.cloud/ipfs/QmNvXUPVi7ZccmPZnWqy5gQ99Ra9a1AnH32RVTRPP7XoU6", 50, 1000,
+        "https://gateway.pinata.cloud/ipfs/QmY2zhnbhksC1EmbNbAojhv5KZKeRAPb9g9FcyeVmJAxD3", 30, 1500,
+        "https://gateway.pinata.cloud/ipfs/QmPC5poiq1EED6AdxHGwDakBiUCf99XvouKoQi4D4z8FKm", 20, 3000
     ){
         
     }
@@ -998,4 +1027,131 @@ contract MOFDiscover {
         return cti;
     }
     
+}
+
+interface AggregatorV3Interface {
+
+  function decimals()
+    external
+    view
+    returns (
+      uint8
+    );
+
+  function description()
+    external
+    view
+    returns (
+      string memory
+    );
+
+  function version()
+    external
+    view
+    returns (
+      uint256
+    );
+
+  // getRoundData and latestRoundData should both raise "No data present"
+  // if they do not have data to report, instead of returning unset values
+  // which could be misinterpreted as actual reported values.
+  function getRoundData(
+    uint80 _roundId
+  )
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+
+  function latestRoundData()
+    external
+    view
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    );
+
+}
+
+contract PriceConsumerV3 {
+
+   AggregatorV3Interface internal priceFeed;
+
+   /**
+    * Network: Rinkeby Testnet
+    * Aggregator: ETH/USD
+    * Address: 0x8A753747A1Fa494EC906cE90E9f37563A8AF630e
+    */
+   constructor() {
+       priceFeed = AggregatorV3Interface(0x8A753747A1Fa494EC906cE90E9f37563A8AF630e);
+   }
+
+   /**
+    * Returns the latest price
+    */
+   function getThePrice() public view returns (int) {
+       (
+           uint80 roundID,
+           int price,
+           uint startedAt,
+           uint timeStamp,
+           uint80 answeredInRound
+       ) = priceFeed.latestRoundData();
+       return price;
+   }
+}
+
+
+contract MOFPurchase is Ownable{
+    
+    int priceETH;
+    int private priceUsdinUahRate = 2700;
+    MOFAll public _nftCollectionAddress;
+    MOFDiscover public _mofDiscoverAddress;
+    PriceConsumerV3 public _priceConsumerAddress;
+
+    int PRICE_CONST;
+    
+    constructor() {
+        _nftCollectionAddress = new MOFAll();
+        _mofDiscoverAddress = new MOFDiscover();
+        _priceConsumerAddress = new PriceConsumerV3();
+        priceETH = _priceConsumerAddress.getThePrice();
+        PRICE_CONST = 10 ** 18 * 10 ** 8 / _priceConsumerAddress.getThePrice() / priceUsdinUahRate * 10 ** 2;
+    }
+    
+    function getPrices() public view returns (int, int, int) {
+        
+        return (_nftCollectionAddress.tokenPrice(0) * PRICE_CONST,
+        _nftCollectionAddress.tokenPrice(1) * PRICE_CONST,
+        _nftCollectionAddress.tokenPrice(2) * PRICE_CONST);
+    }
+    
+    function buyTicket(uint256 _ticketType) public payable returns (uint256) {
+      
+      int price = _nftCollectionAddress.tokenPrice(_ticketType) * PRICE_CONST;
+      
+      int priceMore = price * 105 / 100;
+      int priceLess = price * 95 / 100;
+        
+      require(msg.sender != address(0), "Address can not be empty");
+      require(int(msg.value) <= priceMore, "Amount is not correct");
+      require(int(msg.value) >= priceLess, "Amount is not correct");
+      
+      _nftCollectionAddress.mint(msg.sender, _nftCollectionAddress.totalAmount() + 1, _ticketType); 
+      
+      return _nftCollectionAddress.currentTokenAmount(_ticketType);
+    }
+    
+    function mintTicket(address _to, uint _ticketType) public onlyOwner{
+      _nftCollectionAddress.mint(_to, _nftCollectionAddress.totalAmount() + 1, _ticketType);
+    }
 }
